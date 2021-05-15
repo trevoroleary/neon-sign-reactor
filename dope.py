@@ -1,14 +1,20 @@
+import logging
 import pyaudio
 import numpy as np
 import time
 import wave
-# import matplotlib.pyplot as plt
 from gpiozero import LED, PWMLED
 from time import sleep
 import _thread
+import pickle
 
 LED_PINS = [18, 12, 19]
 leds = [PWMLED(pin, frequency=100, active_high=False) for pin in LED_PINS]
+logger = logging.getLogger(__name__)
+logger.setLevel(logging.INFO)
+log_file = logging.FileHandler('data_out.log')
+log_file.setLevel(logging.DEBUG)
+logger.addHandler(log_file)
 
 def pulse():
     for i in range(100, 0, -1):
@@ -25,15 +31,16 @@ RATE = 16000
 # RATE = 8000
 
 CHUNK = 1024 # RATE / number of updates per second
+# CHUNK = 2048
 
-RECORD_SECONDS = 1000
+RECORD_SECONDS = 10
 
 
 # use a Blackman window
 window = np.blackman(CHUNK)
 
 x = 0
-
+SOUND_DATA = []
 
 def soundPlot(stream):
     t1 = time.time()
@@ -57,8 +64,9 @@ def soundPlot(stream):
         thefreq = which*RATE/CHUNK
         # print("The freq is %f Hz." % (thefreq))
 
-    thresh = 100000
-    freq_range = fftData[1:5]
+    # SOUND_DATA.append(fftData)
+    thresh = 0.3e6
+    freq_range = fftData[1:25]
     if any(y > thresh for y in freq_range):
         _thread.start_new_thread(pulse, ())
 
@@ -80,3 +88,6 @@ if __name__=="__main__":
     stream.stop_stream()
     stream.close()
     p.terminate()
+    sound_file = open('sound_data.pickle', 'wb')
+    pickle.dump(SOUND_DATA, sound_file)
+    sound_file.close()
