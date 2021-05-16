@@ -16,6 +16,20 @@ log_file = logging.FileHandler('data_out.log')
 log_file.setLevel(logging.DEBUG)
 logger.addHandler(log_file)
 
+# FFT Moving Average Settings
+WINDOW_SIZE = 4
+LEVELS = [0]*WINDOW_SIZE # Window of brightness levels for neon
+
+# Audio Stream Settings
+FORMAT = pyaudio.paInt16
+CHANNELS = 1
+RATE = 16000 # The other mic works at 44100
+CHUNK = 1024 # RATE / number of updates per second
+window = np.blackman(CHUNK) # Decaying window on either side of chunk
+
+# Debug Variables
+SOUND_DATA = list()
+
 def set_level(bass_level):
     if bass_level > 1:
         bass_level = 1
@@ -29,25 +43,43 @@ def pulse():
         sleep(0.001)
     led.off()
 
-# open stream
-FORMAT = pyaudio.paInt16
-CHANNELS = 1
-# RATE = 44100
-RATE = 16000
-# RATE = 8000
+def old_reactive_calc(fft_data):
+    trigger_thresh = 0.3e6
+    sense_range = fft_data[1:25]
+    if any(y > trigger_thresh for y in sense_range):
+        _thread.start_new_thread(pulse, ())
 
-CHUNK = 1024 # RATE / number of updates per second
-# CHUNK = 2048
+def volume_reactive_calc(fft_data):
+    global LEVELS
+    high_thresh = 0.3e6
+    low_thresh = 0.1e6
+    sense_range = fft_data[1:10]
+    max_all = max(sense_range)
+    if max_all > low_thresh:
+        level_append = (max_all - low_thresh)/(high_thresh - low_thresh)
+    else:
+        level_append = 0
+    LEVELS.append(level_append/WINDOW_SIZE)
+    LEVELS.pop(0)
+    logger.info(f"Sum of Levels is {sum(LEVELS)}")
+    set_level(sum(LEVELS))
 
-RECORD_SECONDS = 10
+def instant_volume_reactive_calc(fft_data):
+    global LEVELS
+    high_thresh = 0.3e6
+    low_thresh = 0.05e6
+    sense_range = fft_data[1:10]
+    max_all = max(sense_range)
+    if max_all > high_thresh:
+        LEVELS = [(max_all - low_thresh)/(WINDOW_SIZE*(high_thresh - low_thresh))]*WINDOW_SIZE
+    if max_all > low_thresh:
+        LEVELS.append((max_all - low_thresh)/(WINDOW_SIZE*(high_thresh - low_thresh)))
+        LEVELS.pop(0)
+    else:
+        LEVELS.append(0)
+        LEVELS.pop(0)
+    set_level(sum(LEVELS))
 
-
-# use a Blackman window
-window = np.blackman(CHUNK)
-
-x = 0
-SOUND_DATA = []
-LEVELS = list()
 def soundPlot(stream):
     t1 = time.time()
     data = stream.read(CHUNK, exception_on_overflow=False)
@@ -57,39 +89,13 @@ def soundPlot(stream):
 
     fftData=np.abs(np.fft.rfft(indata))
     # fftTime=np.fft.rfftfreq(CHUNK, 1./RATE)
-    which = fftData[1:].argmax() + 1
-
-    # use quadratic interpolation around the max
-    if which != len(fftData)-1:
-        y0,y1,y2 = np.log(fftData[which-1:which+2:])
-        x1 = (y2 - y0) * .5 / (2 * y1 - y2 - y0)
-        # find the frequency and output it
-        thefreq = (which+x1)*RATE/CHUNK
-        # print("The freq is %f Hz." % (thefreq))
-    else:
-        thefreq = which*RATE/CHUNK
-        # print("The freq is %f Hz." % (thefreq))
 
     # SOUND_DATA.append(fftData)
-    #thresh = 0.3e6
-    #freq_range = fftData[1:25]
-    #if any(y > thresh for y in freq_range):
-    #    _thread.start_new_thread(pulse, ())
 
-    # New Version 
-    thresh = 0.3e6
-    thresh_low = 0.05e6
-    div_range = thresh - thresh_low
-    freqs = fftData[1:10]
-    max_all = max(freqs)
-    if max_all > thresh_low:
-        level_append = (max_all - thresh_low)/(thresh-thresh_low)
-    else:
-        level_append = 0
-    LEVELS.append(level_append)
-    if len(LEVELS) > 2:
-        LEVELS.pop(0)
-    set_level(sum(LEVELS)/2)
+    # Reaction Types
+    # old_reactive_calc(fftData)
+    # volume_reactive_calc(fftData)
+    instant_volume_reactive_calc(fftData)
 
 if __name__=="__main__":
     p=pyaudio.PyAudio()
