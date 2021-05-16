@@ -66,17 +66,21 @@ def volume_reactive_calc(fft_data):
 
 def instant_volume_reactive_calc(fft_data):
     global LEVELS
+    # Constants
     high_thresh = 0.3e6
     low_thresh = 0.05e6
+    rest_level = 0.0
+
     sense_range = fft_data[1:10]
     max_all = max(sense_range)
+    offset = rest_level * (1 - (max_all - low_thresh) / high_thresh)
     if max_all > high_thresh:
-        LEVELS = [(max_all - low_thresh)/(WINDOW_SIZE*(high_thresh - low_thresh))]*WINDOW_SIZE
+        LEVELS = [(max_all - low_thresh)/(WINDOW_SIZE*(high_thresh - low_thresh)) + offset]*WINDOW_SIZE
     if max_all > low_thresh:
-        LEVELS.append((max_all - low_thresh)/(WINDOW_SIZE*(high_thresh - low_thresh)))
+        LEVELS.append((max_all - low_thresh)/(WINDOW_SIZE*(high_thresh - low_thresh)) + offset)
         LEVELS.pop(0)
     else:
-        LEVELS.append(0)
+        LEVELS.append(rest_level)
         LEVELS.pop(0)
     set_level(sum(LEVELS))
 
