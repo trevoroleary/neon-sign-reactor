@@ -24,6 +24,7 @@ LEVELS = [0]*WINDOW_SIZE # Window of brightness levels for neon
 FORMAT = pyaudio.paInt16
 CHANNELS = 1
 RATE = 16000 # The other mic works at 44100
+RATE = 44100
 CHUNK = 1024 # RATE / number of updates per second
 window = np.blackman(CHUNK) # Decaying window on either side of chunk
 
@@ -40,7 +41,7 @@ def pulse():
     for i in range(100, 0, -1):
         for led in leds:
             led.value = i/100
-        sleep(0.001)
+        sleep(0.005)
     led.off()
 
 def old_reactive_calc(fft_data):
@@ -69,20 +70,21 @@ def instant_volume_reactive_calc(fft_data):
     # Constants
     high_thresh = 0.3e6
     low_thresh = 0.05e6
-    rest_level = 0.0
+    rest_level = 0.02
 
     sense_range = fft_data[1:10]
     max_all = max(sense_range)
     offset = rest_level * (1 - (max_all - low_thresh) / high_thresh)
     if max_all > high_thresh:
         LEVELS = [(max_all - low_thresh)/(WINDOW_SIZE*(high_thresh - low_thresh)) + offset]*WINDOW_SIZE
+        _thread.start_new_thread(pulse, ())
     if max_all > low_thresh:
         LEVELS.append((max_all - low_thresh)/(WINDOW_SIZE*(high_thresh - low_thresh)) + offset)
         LEVELS.pop(0)
     else:
         LEVELS.append(rest_level)
         LEVELS.pop(0)
-    set_level(sum(LEVELS))
+    _thread.start_new_thread(set_level, (sum(LEVELS),))
 
 def soundPlot(stream):
     t1 = time.time()
@@ -101,7 +103,8 @@ def soundPlot(stream):
     # volume_reactive_calc(fftData)
     instant_volume_reactive_calc(fftData)
 
-if __name__=="__main__":
+x = 1
+if __name__== "__main__":
     p=pyaudio.PyAudio()
     stream=p.open(format=pyaudio.paInt16,channels=1,rate=RATE,input=True,
                   frames_per_buffer=CHUNK, input_device_index=2)
