@@ -24,7 +24,6 @@ LEVELS = [0]*WINDOW_SIZE # Window of brightness levels for neon
 FORMAT = pyaudio.paInt16
 CHANNELS = 1
 RATE = 16000 # The other mic works at 44100
-RATE = 44100
 CHUNK = 1024 # RATE / number of updates per second
 window = np.blackman(CHUNK) # Decaying window on either side of chunk
 
